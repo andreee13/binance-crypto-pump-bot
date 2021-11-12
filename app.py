@@ -6,6 +6,7 @@ import signal
 import sys
 import time
 from datetime import datetime
+from decimal import Decimal
 
 from binance.client import Client
 from dotenv import load_dotenv
@@ -85,22 +86,25 @@ def handlePumpSignal(message):
 
 
 def dumpAssets(coin: str = None):
-    try:
-        file_name = f'assets/{"assets" if coin is None else coin}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
-        logging.info('Dumping assets...')
-        out_file = open(file_name, 'w')
-        json.dump(
-            ASSETS if coin is None else ASSETS[coin], out_file, cls=AssetEncoder, indent=2)
-        logging.info(f'Assets dumped to {file_name}')
-    except Exception as e:
-        logging.error(f'Failed to dump assets. Reason: {e}')
+    if (coin is None and len(ASSETS) > 0) or (coin is not None and coin in ASSETS):
+        try:
+            file_name = f'assets/{"assets" if coin is None else coin}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
+            logging.info('Dumping assets...')
+            out_file = open(file_name, 'w')
+            json.dump(
+                ASSETS if coin is None else ASSETS[coin], out_file, cls=AssetEncoder, indent=2)
+            logging.info(f'Assets dumped to {file_name}')
+        except Exception as e:
+            logging.error(f'Failed to dump assets. Reason: {e}')
+    else:
+        logging.info(f'No assets to dump!')
 
 
 def getCoinData(coin):
     logging.info(f'Getting {coin} data...')
     try:
         price = client.get_symbol_ticker(symbol=coin+PAIRING)['price']
-        return CoinData(coin, float(price), round(BALANCE / float(price)))
+        return CoinData(coin, Decimal(price), round(BALANCE / float(price)))
     except Exception as e:
         raise Exception(f'Error getting {coin} data: {e}')
 
@@ -133,7 +137,7 @@ def buy(coin):
                 stoploss_order = client.order_limit_sell(
                     symbol=coin+PAIRING,
                     quantity=coin_data.amount,
-                    price=round(coin_data.price*STOPLOSS, 6),
+                    price=Decimal(round(coin_data.price*Decimal(STOPLOSS), 6)),
                 )
                 ASSETS[coin].stoploss_order = stoploss_order
                 logging.info(f'{coin} stoploss order placed')
