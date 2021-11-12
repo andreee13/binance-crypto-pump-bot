@@ -1,2 +1,5 @@
 .env
-*.session
+assets/
+logs/
+venv/
+__pycache__
