@@ -12,62 +12,53 @@ from binance.client import Client
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 
-import modules.dumper as dumper
-import modules.env_loader as env_loader
 from modules.asset import Asset, AssetEncoder
 from modules.coin_data import CoinData
-import modules.trader as trader
 
-# ============================================================================= #
-# =============================== BEGIN INPUTS ================================ #
-# ============================================================================= #
+PAIRING = 'BTC'             # Pairing coin in your wallet
+BALANCE = 1                 # Pairing coin amount in your wallet
+TESTNET = True              # Testing mode to test the bot
+SAFE_MODE = True            # Set to True to use 75% of your balance
+TIME_TO_WAIT = 10           # Seconds to wait between each buy and sell
+STOPLOSS = 0.9              # Stoploss percentage. Set to 0 to disable
+CHAT_ID = -1001448562668    # Pump channel Telegram chat ID
 
-# Pairing coin in your wallet
-PAIRING = 'BTC'
-# Pairing coin amount in your wallet
-BALANCE = 1
-# Testing mode to test the bot
-TESTNET = True
-# Set to True to use 75% of your balance
-SAFE_MODE = True
-# Seconds to wait between each buy and sell
-TIME_TO_WAIT = 10
-# Stoploss percentage. Set to 0 to disable
-STOPLOSS = 0.9
-# Pump channel Telegram chat ID
-CHAT_ID = -1001448562668
-# Message template to detect pump signal
 MESSAGE_TEMPLATE = 'The coin we have picked to pump today is'
 
-# ============================================================================= #
-# ================================ END INPUTS ================================= #
-# ============================================================================= #
+load_dotenv()
 
+TELEGRAM_API_ID = os.getenv('TELEGRAM_API_ID')
+TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
 
-env_loader.load_env(debug=True)
-trader.init_trader(TESTNET)
+BINANCE_API_KEY_TEST = os.getenv('BINANCE_API_KEY_TEST')
+BINANCE_API_SECRET_TEST = os.getenv('BINANCE_API_SECRET_TEST')
+
+BINANCE_API_KEY_LIVE = os.getenv('BINANCE_API_KEY_LIVE')
+BINANCE_API_SECRET_LIVE = os.getenv('BINANCE_API_SECRET_LIVE')
+
+if TESTNET:
+    client = Client(BINANCE_API_KEY_TEST, BINANCE_API_SECRET_TEST)
+    client.API_URL = 'https://testnet.binance.vision/api'
+else:
+    client = Client(BINANCE_API_KEY_LIVE, BINANCE_API_SECRET_LIVE)
 
 if SAFE_MODE:
-    BALANCE = BALANCE * 0.75
+    BALANCE = float(BALANCE * 0.75)
 
 ASSETS = {}
 
 
 def main():
-    signal.signal(signal.SIGINT, signal_handler)
-    logging.basicConfig(
-        level=logging.INFO,
-        filename=f'logs/log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log',
-        filemode='w',
-        format="%(asctime)-15s %(levelname)-8s %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, filename=f'logs/log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log',
+                        filemode='w', format="%(asctime)-15s %(levelname)-8s %(message)s")
     logging.getLogger().addHandler(logging.StreamHandler())
     logging.info('Starting bot...')
-    with TelegramClient('logs/telegram', os.getenv('TELEGRAM_API_ID'), os.getenv('TELEGRAM_API_HASH')) as telegramClient:
+    signal.signal(signal.SIGINT, signal_handler)
+    with TelegramClient('logs/telegram', TELEGRAM_API_ID, TELEGRAM_API_HASH) as telegramClient:
 
         @telegramClient.on(events.NewMessage(incoming=True, pattern=MESSAGE_TEMPLATE, chats=CHAT_ID))
         async def handler(event):
-            handle_pump_signal(event.message.text)
+            handlePumpSignal(event.message.text)
 
         logging.info('Bot started!')
         telegramClient.run_until_disconnected()
@@ -75,12 +66,12 @@ def main():
 
 def signal_handler(signal, frame):
     logging.info('Exiting...')
-    dumper.dump_all_assets(ASSETS)
+    dumpAssets()
     logging.info('Exited!')
     sys.exit(0)
 
 
-def handle_pump_signal(message):
+def handlePumpSignal(message):
     try:
         coin = re.search('[#]\w+', message).group(0)[1:].upper()
         logging.info(f'Pump detected on {coin}!')
@@ -89,15 +80,30 @@ def handle_pump_signal(message):
         time.sleep(TIME_TO_WAIT)
         sell(coin)
         logging.info(f'Pump finished on {coin}!')
-        dumper.dump_asset(ASSETS[coin])
+        dumpAssets(coin)
     except Exception as e:
         logging.critical(f'Unexpected error occured: {e}')
 
 
-def compute_coin_data(coin):
+def dumpAssets(coin: str = None):
+    if (coin is None and len(ASSETS) > 0) or (coin is not None and coin in ASSETS):
+        try:
+            file_name = f'assets/{"assets" if coin is None else coin}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
+            logging.info('Dumping assets...')
+            out_file = open(file_name, 'w')
+            json.dump(
+                ASSETS if coin is None else ASSETS[coin], out_file, cls=AssetEncoder, indent=2)
+            logging.info(f'Assets dumped to {file_name}')
+        except Exception as e:
+            logging.error(f'Failed to dump assets. Reason: {e}')
+    else:
+        logging.info(f'No assets to dump!')
+
+
+def getCoinData(coin):
     logging.info(f'Getting {coin} data...')
     try:
-        price = trader.get_symbol_ticker(symbol=coin, pairing=PAIRING)['price']
+        price = client.get_symbol_ticker(symbol=coin+PAIRING)['price']
         return CoinData(coin, Decimal(price), round(BALANCE / float(price)))
     except Exception as e:
         raise Exception(f'Error getting {coin} data: {e}')
@@ -105,7 +111,7 @@ def compute_coin_data(coin):
 
 def buy(coin):
     try:
-        coin_data = compute_coin_data(coin)
+        coin_data = getCoinData(coin)
         logging.info(f'Data retrieved for {coin}')
     except Exception as e:
         logging.error(f'Failed to buy {coin}. Reason: {e}')
@@ -113,31 +119,25 @@ def buy(coin):
     try:
         logging.info(
             f'Buying {coin_data.amount} {coin} at {coin_data.price} {PAIRING}...')
-        buy_order = trader.create_market_order(
-            symbol=coin,
-            pairing=PAIRING,
-            side="BUY",
-            quantity=coin_data.amount
+        buy_order = client.create_order(
+            symbol=coin+PAIRING,
+            side=Client.SIDE_BUY,
+            type=Client.ORDER_TYPE_MARKET,
+            quantity=coin_data.amount,
         )
         if coin in ASSETS:
             ASSETS[coin].amount += coin_data.amount
             ASSETS[coin].orders.append(buy_order)
         else:
-            ASSETS[coin] = Asset(
-                coin,
-                coin_data.amount,
-                [buy_order],
-                None
-            )
+            ASSETS[coin] = Asset(coin, coin_data.amount,
+                                 [buy_order], None)
         if STOPLOSS > 0:
             try:
                 logging.info(f'Placing {coin} stoploss order...')
-                stoploss_order = trader.create_limit_order(
-                    symbol=coin,
-                    pairing=PAIRING,
-                    side="SELL",
+                stoploss_order = client.order_limit_sell(
+                    symbol=coin+PAIRING,
                     quantity=coin_data.amount,
-                    price=Decimal(round(coin_data.price*Decimal(STOPLOSS), 6))
+                    price=Decimal(round(coin_data.price*Decimal(STOPLOSS), 6)),
                 )
                 ASSETS[coin].stoploss_order = stoploss_order
                 logging.info(f'{coin} stoploss order placed')
@@ -153,11 +153,11 @@ def sell(coin):
         try:
             logging.info(
                 f'Selling {ASSETS[coin].amount} {coin} to {PAIRING}...')
-            sell_oder = trader.create_market_order(
-                symbol=coin,
-                pairing=PAIRING,
-                side="SELL",
-                quantity=ASSETS[coin].amount
+            sell_order = client.create_order(
+                symbol=coin+PAIRING,
+                side=Client.SIDE_SELL,
+                type=Client.ORDER_TYPE_MARKET,
+                quantity=ASSETS[coin].amount,
             )
             logging.info(f'Successfully sold {ASSETS[coin].amount} {coin}')
             ASSETS[coin].amount = 0
@@ -165,10 +165,9 @@ def sell(coin):
             if ASSETS[coin].stoploss_order is not None:
                 try:
                     logging.info(f'Cancelling {coin} stoploss order...')
-                    trader.cancel_order(
-                        symbol=coin,
-                        pairing=PAIRING,
-                        order_id=ASSETS[coin].stoploss_order['orderId'],
+                    client.cancel_order(
+                        symbol=coin+PAIRING,
+                        orderId=ASSETS[coin].stoploss_order['orderId'],
                     )
                     logging.info(f'{coin} stoploss order cancelled')
                 except Exception as e:
