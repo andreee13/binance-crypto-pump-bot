@@ -1,4 +1,5 @@
 import enum
+import os
 from decimal import Decimal
 
 from binance.client import Client

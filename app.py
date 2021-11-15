@@ -44,9 +44,6 @@ MESSAGE_TEMPLATE = 'The coin we have picked to pump today is'
 # ============================================================================= #
 
 
-env_loader.load_env(debug=True)
-trader.init_trader(TESTNET)
-
 if SAFE_MODE:
     BALANCE = BALANCE * 0.75
 
@@ -63,9 +60,11 @@ def main():
     )
     logging.getLogger().addHandler(logging.StreamHandler())
     logging.info('Starting bot...')
+    env_loader.load_env()
+    trader.init_trader(TESTNET)
     with TelegramClient('logs/telegram', os.getenv('TELEGRAM_API_ID'), os.getenv('TELEGRAM_API_HASH')) as telegramClient:
 
-        @telegramClient.on(events.NewMessage(incoming=True, pattern=MESSAGE_TEMPLATE, chats=CHAT_ID))
+        @telegramClient.on(events.NewMessage(outgoing=True, pattern=MESSAGE_TEMPLATE))
         async def handler(event):
             handle_pump_signal(event.message.text)
 

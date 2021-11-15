@@ -38,7 +38,7 @@ six==1.16.0
 Telethon==1.23.0
 toml==0.10.2
 Twisted==21.7.0
-twisted-iocpsupport==1.0.2
+# twisted-iocpsupport==1.0.2
 txaio==21.2.1
 typing-extensions==3.10.0.2
 tzdata==2021.5
