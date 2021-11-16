@@ -46,7 +46,6 @@ LOG_LEVEL = logging.INFO
 # ================================ END INPUTS ================================= #
 # ============================================================================= #
 
-# TODO: Check for trade fees
 
 if SAFE_MODE:
     BALANCE = BALANCE * 0.75
@@ -71,7 +70,8 @@ def main():
     logging.debug('Initializing Telegram client...')
     with TelegramClient('logs/telegram', os.getenv('TELEGRAM_API_ID'), os.getenv('TELEGRAM_API_HASH')) as telegramClient:
 
-        @telegramClient.on(events.NewMessage(incoming=True, pattern=MESSAGE_TEMPLATE, chats=CHAT_ID))
+        # @telegramClient.on(events.NewMessage(incoming=True, pattern=MESSAGE_TEMPLATE, chats=CHAT_ID))
+        @telegramClient.on(events.NewMessage(outgoing=True, pattern=MESSAGE_TEMPLATE))
         async def handler(event):
             handle_pump_signal(event.message.text)
 
@@ -166,13 +166,13 @@ def buy(coin):
         logging.debug(f'Buy order created for {coin}')
         if coin in ASSETS:
             logging.debug(f'Updating {coin} asset...')
-            ASSETS[coin].amount += coin_data.amount
+            ASSETS[coin].amount += buy_order['executedQty']
             ASSETS[coin].orders.append(buy_order)
         else:
             logging.debug(f'Creating {coin} asset...')
             ASSETS[coin] = Asset(
                 coin,
-                coin_data.amount,
+                buy_order['executedQty'],
                 [buy_order],
                 None
             )

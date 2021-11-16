@@ -1,16 +1,16 @@
 VENV = venv
-PYTHON = $(VENV)/Scripts/python
-PIP = $(VENV)/Scripts/pip3
+PYTHON = $(VENV)/bin/python
+PIP = $(VENV)/bin/pip3
 CLEANUP = *.pyc
 
-run: $(VENV)/Scripts/activate
+run: $(VENV)/bin/activate
 	$(PYTHON) app.py
 
 
-$(VENV)/Scripts/activate: requirements.txt
-	py -m venv $(VENV)
+$(VENV)/bin/activate: requirements.txt
+	python3 -m venv $(VENV)
 	$(PIP) install -r requirements.txt
 
 
 clean:
-	py -m venv --clear $(VENV)
+	python3 -m venv --clear $(VENV)
