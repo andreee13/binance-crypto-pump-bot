@@ -50,10 +50,13 @@ def _check_symbol_balance(symbol, quantity):
     :param pairing: str
     """
     logging.debug(f'Checking balance of pairing {symbol}...')
-    if float(get_balance(symbol)['free']) >= quantity:
-        logging.info(f'Pairing {symbol} balance is enough')
-    else:
-        logging.warning(f'Pairing {symbol} balance is not enough!')
+    try:
+        if float(get_balance(symbol)['free']) >= quantity:
+            logging.info(f'Pairing {symbol} balance is enough')
+        else:
+            logging.warning(f'Pairing {symbol} balance is not enough!')
+    except Exception as e:
+        logging.error(f'Error checking pairing balance: {e}')
 
 
 def get_balance(symbol):

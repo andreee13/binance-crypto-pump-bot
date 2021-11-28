@@ -22,7 +22,7 @@ def dump_all_assets(assets):
     :param assets: dict
     """
     if len(assets) > 0:
-        logging.info('Dumping all assets...')
+        logging.debug('Dumping all assets...')
         file_name = f'assets/ASSETS_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
         logging.debug(f'Creating file {file_name}')
         with open(file_name, 'w') as f:
@@ -39,7 +39,7 @@ def dump_asset(asset):
     :param asset: Asset
     """
     if asset is not None:
-        logging.info(f'Dumping asset {asset.symbol}...')
+        logging.debug(f'Dumping asset {asset.symbol}...')
         file_name = f'assets/{asset.symbol}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
         logging.debug(f'Creating file {file_name}')
         with open(file_name, 'w') as f:

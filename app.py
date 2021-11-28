@@ -26,21 +26,21 @@ from modules.coin_data import CoinData
 # Pairing coin in your wallet
 PAIRING = 'BTC'
 # Pairing coin amount in your wallet
-BALANCE = 0.1
+BALANCE = 0.01134703
 # Testing mode to test the bot
-TESTNET = True
+TESTNET = False
 # Set to True to use 75% of your balance
 SAFE_MODE = True
 # Seconds to wait between each buy and sell
-TIME_TO_WAIT = 10
+TIME_TO_WAIT = 15
 # Stoploss percentage. Set to 0 to disable
-STOPLOSS = 0.9
+STOPLOSS = 0
 # Pump channel Telegram chat ID
 CHAT_ID = -1001448562668
 # Message template to detect pump signal
 MESSAGE_TEMPLATE = 'The coin we have picked to pump today is'
 # Logging level: CRITICAL, ERROR, WARNING, INFO, DEBUG
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.DEBUG
 
 # ============================================================================= #
 # ================================ END INPUTS ================================= #
@@ -48,7 +48,7 @@ LOG_LEVEL = logging.INFO
 
 
 if SAFE_MODE:
-    BALANCE = BALANCE * 0.75
+    BALANCE = BALANCE * 0.74
 
 ASSETS = {}
 
@@ -70,8 +70,8 @@ def main():
     logging.debug('Initializing Telegram client...')
     with TelegramClient('logs/telegram', os.getenv('TELEGRAM_API_ID'), os.getenv('TELEGRAM_API_HASH')) as telegramClient:
 
-        # @telegramClient.on(events.NewMessage(incoming=True, pattern=MESSAGE_TEMPLATE, chats=CHAT_ID))
-        @telegramClient.on(events.NewMessage(outgoing=True, pattern=MESSAGE_TEMPLATE))
+        # @telegramClient.on(events.NewMessage(outgoing=True, pattern=MESSAGE_TEMPLATE))
+        @telegramClient.on(events.NewMessage(incoming=True, pattern=MESSAGE_TEMPLATE, chats=CHAT_ID))
         async def handler(event):
             handle_pump_signal(event.message.text)
 
@@ -166,13 +166,15 @@ def buy(coin):
         logging.debug(f'Buy order created for {coin}')
         if coin in ASSETS:
             logging.debug(f'Updating {coin} asset...')
-            ASSETS[coin].amount += buy_order['executedQty']
+            ASSETS[coin].amount += float(buy_order['executedQty']) - \
+                float(buy_order['fills'][0]['commission']),
             ASSETS[coin].orders.append(buy_order)
         else:
             logging.debug(f'Creating {coin} asset...')
             ASSETS[coin] = Asset(
                 coin,
-                buy_order['executedQty'],
+                float(buy_order['executedQty']) -
+                float(buy_order['fills'][0]['commission']),
                 [buy_order],
                 None
             )
@@ -185,7 +187,7 @@ def buy(coin):
                     symbol=coin,
                     pairing=PAIRING,
                     side="SELL",
-                    quantity=trader.get_balance(coin)['free'],
+                    quantity=ASSETS[coin].amount,
                     price=Decimal(round(coin_data.price*Decimal(STOPLOSS), 6))
                 )
                 ASSETS[coin].stoploss_order = stoploss_order
@@ -220,11 +222,12 @@ def sell(coin):
             if ASSETS[coin].stoploss_order is not None:
                 try:
                     logging.info(f'Cancelling {coin} stoploss order...')
-                    trader.cancel_order(
+                    cancel_order = trader.cancel_order(
                         symbol=coin,
                         pairing=PAIRING,
                         order_id=ASSETS[coin].stoploss_order['orderId'],
                     )
+                    ASSETS[coin].stoploss_order = cancel_order
                     logging.info(f'{coin} stoploss order cancelled')
                 except Exception as e:
                     logging.warning(
