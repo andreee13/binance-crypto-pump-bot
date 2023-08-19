@@ -15,7 +15,7 @@ frozenlist==1.2.0
 hyperlink==21.0.0
 idna==3.3
 incremental==21.3.0
-Mako==1.1.5
+Mako==1.2.2
 Markdown==3.3.4
 MarkupSafe==2.0.1
 multidict==5.2.0
